@@ -1,0 +1,15 @@
+# Entorno virtual
+venv/
+env/
+.venv/
+
+# Caché de Python
+__pycache__/
+*.pyc
+
+# Supabase o configuraciones locales (opcional)
+.env
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SismoVE</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        /* Variables de color y ajustes base */
+        :root {
+            --bg-dark: #1a1010;
+            --bg-panel: #2a1b1b;
+            --text-main: #ffffff;
+            --text-muted: #999999;
+            --accent: #d89e4b;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* --- CABECERA Y MENÚ HAMBURGUESA --- */
+        .header {
+            background-color: var(--bg-panel);
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            border-bottom: 2px solid #3a2525;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .menu-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            margin-right: 15px;
+            padding: 0;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 22px;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+            letter-spacing: 1px;
+        }
+        
+        .header h1 span { color: #ff5555; } /* Detalle rojo para la palabra Sismo */
+
+        /* --- SIDEBAR (Menú Lateral) --- */
+        .sidebar {
+            height: 100%;
+            width: 250px;
+            position: fixed;
+            z-index: 2000;
+            top: 0;
+            left: -250px; /* Oculto por defecto */
+            background-color: #201313;
+            overflow-x: hidden;
+            transition: 0.3s;
+            padding-top: 60px;
+            border-right: 1px solid #3a2525;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+        }
+
+        .sidebar a {
+            padding: 15px 25px;
+            text-decoration: none;
+            font-size: 18px;
+            color: var(--text-main);
+            display: block;
+            transition: 0.2s;
+            border-bottom: 1px solid #2a1b1b;
+        }
+
+        .sidebar a:hover { background-color: #3a2525; color: var(--accent); }
+        .sidebar .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 30px;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* Fondo oscuro al abrir menú */
+        .overlay {
+            position: fixed;
+            display: none;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 1500;
+        }
+
+        /* --- VISTA DE LISTA (Eventos) --- */
+        .subtitle {
+            color: var(--accent);
+            font-size: 13px;
+            font-weight: bold;
+            padding: 8px 20px;
+            background-color: #201313;
+            border-bottom: 1px solid #333;
+        }
+
+        .sismo-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid #332222;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .sismo-container:hover { background-color: #251818; }
+        .sismo-info { display: flex; flex-direction: column; gap: 5px; }
+        .region { font-size: 15px; font-weight: bold; text-transform: uppercase; }
+        .coordenadas { font-size: 12px; color: var(--text-muted); }
+        .hora { font-size: 12px; color: #bbb; }
+        .magnitud-box { display: flex; flex-direction: column; align-items: flex-end; }
+        .mag-valor { font-size: 28px; font-weight: bold; }
+
+        .color-menor { color: #aaaaaa; }
+        .color-ligero { color: #a855f7; }
+        .color-moderado { color: #f97316; }
+        .color-fuerte { color: #ef4444; }
+
+        /* --- VISTA DE MAPA Y DETALLE --- */
+        #vista-mapa { display: none; /* Oculto inicialmente */ }
+        
+        .btn-volver {
+            background-color: var(--bg-panel);
+            color: var(--accent);
+            border: none;
+            padding: 15px 20px;
+            width: 100%;
+            text-align: left;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-bottom: 1px solid #333;
+        }
+        
+        .btn-volver:hover { background-color: #3a2525; }
+
+        .detalle-tarjeta {
+            background-color: #201313;
+            padding: 20px;
+            margin: 15px;
+            border-radius: 10px;
+            border: 1px solid #3a2525;
+        }
+
+        .detalle-fila {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .detalle-label { color: var(--text-muted); }
+
+        #map {
+            height: 300px;
+            width: 100%;
+            background-color: #333;
+            margin-top: 10px;
+            border-radius: 10px;
+        }
+
+        /* --- ANIMACIÓN RADAR PARA EL MAPA --- */
+        .pulsating-circle {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translateX(-50%) translateY(-50%);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.8);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.9);
+        }
+        .pulsating-circle:before {
+            content: '';
+            position: absolute;
+            left: -20px;
+            top: -20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.4);
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.33); opacity: 1; }
+            80%, 100% { opacity: 0; transform: scale(1.5); }
+        }
+
+        .loading { text-align: center; padding: 50px; color: #888; }
+
+        /* --- ESTILOS PARA EL POPUP DEL MAPA --- */
+        .leaflet-popup-content-wrapper {
+            background-color: #201313; /* Fondo oscuro */
+            color: white;
+            border-radius: 12px;
+            border: 1px solid #3a2525;
+            box-shadow: 0 3px 14px rgba(0,0,0,0.6);
+        }
+        .leaflet-popup-tip {
+            background-color: #201313; /* Flechita oscura */
+        }
+        .eq-popup-header {
+            border-bottom: 1px solid #3a2525;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #d89e4b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .eq-popup-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 6px;
+            align-items: center;
+        }
+        .eq-popup-label { color: #999; }
+        .eq-popup-value { font-weight: normal; }
+        .eq-popup-mag { font-size: 26px; font-weight: bold; }
+        .leaflet-popup-close-button { color: #999 !important; }
+    </style>
+</head>
+<body>
+
+    <div id="miSidebar" class="sidebar">
+        <button class="close-btn" onclick="cerrarMenu()">×</button>
+        <a href="#" onclick="mostrarVista('lista'); cerrarMenu();">📋 Eventos</a>
+        <a href="#" onclick="cerrarMenu(); alert('El mapa global está en desarrollo.');">🗺️ Mapa</a>
+        <a href="#" onclick="cerrarMenu(); alert('Módulo de reportes ciudadanos en construcción.');">📢 Reportar</a>
+    </div>
+    <div id="overlay" class="overlay" onclick="cerrarMenu()"></div>
+
+    <div class="header">
+        <button class="menu-btn" onclick="abrirMenu()">☰</button>
+        <h1><span>Sismo</span>VE</h1>
+    </div>
+
+    <div id="vista-lista">
+        <div class="subtitle">HOY - VENEZUELA</div>
+        <div id="lista-sismos">
+            <div class="loading">Cargando datos sísmicos en tiempo real...</div>
+        </div>
+    </div>
+
+    <div id="vista-mapa">
+        <button class="btn-volver" onclick="mostrarVista('lista')">← Volver a la lista</button>
+        
+        <div class="detalle-tarjeta">
+            <h2 id="det-region" style="margin-top: 0; font-size: 18px; color: white;">CARGANDO...</h2>
+            <hr style="border-color: #3a2525;">
+            
+            <div class="detalle-fila">
+                <span class="detalle-label">Magnitud:</span>
+                <span id="det-mag" style="font-weight: bold; font-size: 18px;">-</span>
+            </div>
+            <div class="detalle-fila">
+                <span class="detalle-label">Profundidad:</span>
+                <span id="det-prof">-</span>
+            </div>
+            <div class="detalle-fila">
+                <span class="detalle-label">Fecha/Hora:</span>
+                <span id="det-hora">-</span>
+            </div>
+            
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script>
+        // ================= CREDENCIALES SUPABASE =================
+        const SUPABASE_URL = "https://nbvjpqmqceencnjmtfng.supabase.co"; 
+        const SUPABASE_KEY = "sb_publishable_QvN-m2HxKJUV2nHdF_wKqQ_VyAv1Zn2";
+        // =========================================================
+
+        let mapaInstancia = null;
+        let marcador = null;
+
+        // Control del Menú Lateral
+        function abrirMenu() {
+            document.getElementById("miSidebar").style.left = "0";
+            document.getElementById("overlay").style.display = "block";
+        }
+
+        function cerrarMenu() {
+            document.getElementById("miSidebar").style.left = "-250px";
+            document.getElementById("overlay").style.display = "none";
+        }
+
+        // Cambio entre vistas (Lista <-> Mapa)
+        function mostrarVista(vista) {
+            if (vista === 'lista') {
+                document.getElementById('vista-lista').style.display = 'block';
+                document.getElementById('vista-mapa').style.display = 'none';
+            } else if (vista === 'mapa') {
+                document.getElementById('vista-lista').style.display = 'none';
+                document.getElementById('vista-mapa').style.display = 'block';
+            }
+        }
+
+        function obtenerColorMagnitud(mag) {
+            if (mag < 3.0) return 'color-menor';
+            if (mag >= 3.0 && mag < 4.0) return 'color-ligero';
+            if (mag >= 4.0 && mag < 5.0) return 'color-moderado';
+            return 'color-fuerte';
+        }
+
+        // Función que se ejecuta al hacer clic en un sismo
+        function abrirDetalleSismo(sismo) {
+            document.getElementById('det-region').innerText = sismo.region;
+            
+            const magElement = document.getElementById('det-mag');
+            magElement.innerText = sismo.magnitud.toFixed(1);
+            magElement.className = obtenerColorMagnitud(sismo.magnitud);
+            
+            document.getElementById('det-prof').innerText = sismo.profundidad + " km";
+            document.getElementById('det-hora').innerText = sismo.hora_local;
+
+            mostrarVista('mapa');
+
+            const lat = sismo.latitud;
+            const lon = sismo.longitud;
+
+            // Icono Radar Personalizado
+            const iconoRadar = L.divIcon({
+                className: 'css-icon',
+                html: '<div class="pulsating-circle"></div>',
+                iconSize: [20, 20]
+            });
+
+            if (!mapaInstancia) {
+                mapaInstancia = L.map('map').setView([lat, lon], 7);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+                }).addTo(mapaInstancia);
+                
+                marcador = L.marker([lat, lon], {icon: iconoRadar}).addTo(mapaInstancia);
+            } else {
+                mapaInstancia.setView([lat, lon], 7);
+                if(marcador) { mapaInstancia.removeLayer(marcador); }
+                marcador = L.marker([lat, lon], {icon: iconoRadar}).addTo(mapaInstancia);
+            }
+
+            // --- AQUÍ EMPIEZA EL CÓDIGO DEL POPUP ---
+            const contenidoPopup = `
+                <div style="min-width: 220px;">
+                    <div class="eq-popup-header">
+                        <b>${sismo.region}</b> <span>🇻🇪</span>
+                    </div>
+                    <div class="eq-popup-row">
+                        <span class="eq-popup-label">magnitud:</span>
+                        <span class="eq-popup-mag ${obtenerColorMagnitud(sismo.magnitud)}">${sismo.magnitud.toFixed(1)}</span>
+                    </div>
+                    <div class="eq-popup-row">
+                        <span class="eq-popup-label">profundidad:</span>
+                        <span class="eq-popup-value">${sismo.profundidad} km</span>
+                    </div>
+                    <div class="eq-popup-row">
+                        <span class="eq-popup-label">fecha/hora:</span>
+                        <span class="eq-popup-value">${sismo.hora_local}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Le atamos el popup al marcador y le decimos que se abra automáticamente
+            marcador.bindPopup(contenidoPopup).openPopup();
+            // --- AQUÍ TERMINA EL CÓDIGO DEL POPUP ---
+
+            setTimeout(() => { mapaInstancia.invalidateSize(); }, 100);
+        }
+
+        function calcularTiempoTranscurrido(hora_local) {
+            const ahora = new Date();
+            const partes = hora_local.split(' ');
+            if (partes.length !== 2) return "";
+            
+            let [horas, minutos] = partes[0].split(':').map(Number);
+            const ampm = partes[1].toLowerCase();
+
+            if (ampm === 'pm' && horas < 12) horas += 12;
+            if (ampm === 'am' && horas === 12) horas = 0;
+
+            const fechaSismo = new Date();
+            fechaSismo.setHours(horas, minutos, 0, 0);
+
+            const difMinutos = Math.floor((ahora - fechaSismo) / 60000);
+            const difHoras = Math.floor(difMinutos / 60);
+
+            if (difMinutos < 0) return "(hace un momento)";
+            if (difMinutos < 60) return `(hace ${difMinutos} min)`;
+            if (difHoras === 1) return `(hace una hora)`;
+            return `(hace ${difHoras} h)`;
+        }
+
+        async function cargarSismos() {
+            try {
+                const hoy = new Date();
+                hoy.setHours(0, 0, 0, 0); 
+                const inicioDiaISO = hoy.toISOString();
+
+                // Aquí ya está modificado para pedir los últimos 100 sismos sin borrar el historial
+                const url = `${SUPABASE_URL}/rest/v1/historial_sismos?select=*&order=timestamp_utc.desc&limit=100`;
+                
+                const respuesta = await fetch(url, {
+                    method: 'GET',
+                    headers: { 
+                        'apikey': SUPABASE_KEY, 
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'Cache-Control': 'no-cache' 
+                    }
+                });
+
+                if (!respuesta.ok) throw new Error("Error con Supabase");
+                
+                const sismos = await respuesta.json();
+                const contenedor = document.getElementById('lista-sismos');
+                contenedor.innerHTML = '';
+
+                if (sismos.length === 0) {
+                    contenedor.innerHTML = '<div class="loading">No se han registrado eventos sísmicos recientes. 🇻🇪</div>';
+                    return;
+                }
+
+                // ==========================================
+                // ORDENAMIENTO POR HORA (EL MÁS NUEVO ARRIBA)
+                // ==========================================
+                sismos.sort((a, b) => {
+                    const convertirAMinutos = (horaStr) => {
+                        const partes = horaStr.split(' ');
+                        if (partes.length !== 2) return 0;
+                        let [h, m] = partes[0].split(':').map(Number);
+                        const ampm = partes[1].toLowerCase();
+                        if (ampm === 'pm' && h < 12) h += 12;
+                        if (ampm === 'am' && h === 12) h = 0;
+                        return h * 60 + m;
+                    };
+                    // Restamos la hora de B menos la de A para que quede descendente
+                    return convertirAMinutos(b.hora_local) - convertirAMinutos(a.hora_local);
+                });
+                // ==========================================
+
+                sismos.forEach(sismo => {
+                    const colorClase = obtenerColorMagnitud(sismo.magnitud);
+                    const tiempoText = calcularTiempoTranscurrido(sismo.hora_local);
+                    
+                    const div = document.createElement('div');
+                    div.className = 'sismo-container';
+                    div.onclick = () => abrirDetalleSismo(sismo); 
+                    
+                    div.innerHTML = `
+                        <div class="sismo-info">
+                            <div class="region">${sismo.region}</div>
+                            <div class="coordenadas">🌐 ${sismo.latitud}, ${sismo.longitud}</div>
+                            <div class="hora">🕒 ${sismo.hora_local} &nbsp;&nbsp; <span style="color:#888;">${tiempoText}</span></div>
+                        </div>
+                        <div class="magnitud-box">
+                            <div class="mag-valor ${colorClase}">${sismo.magnitud.toFixed(1)}</div>
+                        </div>
+                    `;
+                    contenedor.appendChild(div);
+                });
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('lista-sismos').innerHTML = '<div class="loading">Error cargando el historial.</div>';
+            }
+        }
+
+        cargarSismos();
+        setInterval(cargarSismos, 60000);
+    </script>
+</body>
+</html>
