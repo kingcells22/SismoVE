@@ -401,36 +401,29 @@
             setTimeout(() => { mapaInstancia.invalidateSize(); }, 100);
         }
 
-        function calcularTiempoTranscurrido(hora_local) {
-            const ahora = new Date();
-            const partes = hora_local.split(' ');
-            if (partes.length !== 2) return "";
+        // ================= CORRECCIÓN DEL TIEMPO TRANSCURRIDO =================
+        function calcularTiempoTranscurrido(timestamp_utc) {
+            if (!timestamp_utc) return ""; // Por seguridad
             
-            let [horas, minutos] = partes[0].split(':').map(Number);
-            const ampm = partes[1].toLowerCase();
-
-            if (ampm === 'pm' && horas < 12) horas += 12;
-            if (ampm === 'am' && horas === 12) horas = 0;
-
-            const fechaSismo = new Date();
-            fechaSismo.setHours(horas, minutos, 0, 0);
-
+            const ahora = new Date();
+            const fechaSismo = new Date(timestamp_utc); // Usa la fecha REAL del servidor
+            
             const difMinutos = Math.floor((ahora - fechaSismo) / 60000);
             const difHoras = Math.floor(difMinutos / 60);
+            const difDias = Math.floor(difHoras / 24);
 
-            if (difMinutos < 0) return "(hace un momento)";
+            if (difMinutos < 2) return "(hace un momento)";
             if (difMinutos < 60) return `(hace ${difMinutos} min)`;
             if (difHoras === 1) return `(hace una hora)`;
-            return `(hace ${difHoras} h)`;
+            if (difHoras < 24) return `(hace ${difHoras} h)`;
+            if (difDias === 1) return `(ayer)`;
+            return `(hace ${difDias} días)`;
         }
+        // ======================================================================
 
         async function cargarSismos() {
             try {
-                const hoy = new Date();
-                hoy.setHours(0, 0, 0, 0); 
-                const inicioDiaISO = hoy.toISOString();
-
-                // Aquí ya está modificado para pedir los últimos 100 sismos sin borrar el historial
+                // Pedimos los últimos 100 sismos, ya ordenados de más nuevo a más viejo por Supabase
                 const url = `${SUPABASE_URL}/rest/v1/historial_sismos?select=*&order=timestamp_utc.desc&limit=100`;
                 
                 const respuesta = await fetch(url, {
@@ -453,27 +446,16 @@
                     return;
                 }
 
-                // ==========================================
-                // ORDENAMIENTO POR HORA (EL MÁS NUEVO ARRIBA)
-                // ==========================================
-                sismos.sort((a, b) => {
-                    const convertirAMinutos = (horaStr) => {
-                        const partes = horaStr.split(' ');
-                        if (partes.length !== 2) return 0;
-                        let [h, m] = partes[0].split(':').map(Number);
-                        const ampm = partes[1].toLowerCase();
-                        if (ampm === 'pm' && h < 12) h += 12;
-                        if (ampm === 'am' && h === 12) h = 0;
-                        return h * 60 + m;
-                    };
-                    // Restamos la hora de B menos la de A para que quede descendente
-                    return convertirAMinutos(b.hora_local) - convertirAMinutos(a.hora_local);
-                });
-                // ==========================================
+                // ================= CORRECCIÓN DE ORDENAMIENTO =================
+                // Usamos el timestamp_utc real para ordenar, garantizando que un sismo de hoy
+                // a la 1 PM siempre esté por encima de uno de ayer a las 11 PM.
+                sismos.sort((a, b) => new Date(b.timestamp_utc) - new Date(a.timestamp_utc));
+                // ==============================================================
 
                 sismos.forEach(sismo => {
                     const colorClase = obtenerColorMagnitud(sismo.magnitud);
-                    const tiempoText = calcularTiempoTranscurrido(sismo.hora_local);
+                    // Ahora le pasamos la fecha absoluta de la base de datos al cálculo
+                    const tiempoText = calcularTiempoTranscurrido(sismo.timestamp_utc);
                     
                     const div = document.createElement('div');
                     div.className = 'sismo-container';
